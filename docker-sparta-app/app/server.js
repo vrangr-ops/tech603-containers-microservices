@@ -10,63 +10,11 @@ const STYLES_PATH = path.join(__dirname, 'styles.css');
 const APP_JS_PATH = path.join(__dirname, 'app.js');
 const X_MARKER_IMAGE_PATH = path.join(__dirname, 'public', 'images', 'x.png');
 const O_MARKER_IMAGE_PATH = path.join(__dirname, 'public', 'images', 'o.png');
-const PACKAGE_JSON_PATH = path.join(__dirname, 'package.json');
-const PACKAGE_METADATA = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
-const APP_VERSION = `v${PACKAGE_METADATA.version}`;
 let hasLoggedMissingMongoDriver = false;
 
 function isEnabledEnvToggle(value) {
 	const normalized = String(value || '').trim().toLowerCase();
 	return normalized === 'true';
-}
-
-function normalizeMarkerImagesPath(value) {
-	const trimmed = String(value || '').trim();
-	if (!trimmed) {
-		return '/images';
-	}
-
-	const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
-	return withoutTrailingSlash || '/images';
-}
-
-function isHttpOrHttpsUrl(value) {
-	try {
-		const parsed = new URL(value);
-		return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-	} catch {
-		return false;
-	}
-}
-
-function resolveMarkerImagesPathConfig(value) {
-	const trimmed = String(value || '').trim();
-	if (!trimmed) {
-		return {
-			markerImagesPath: '/images',
-			invalidConfiguredValue: null
-		};
-	}
-
-	if (!isHttpOrHttpsUrl(trimmed)) {
-		return {
-			markerImagesPath: '/images',
-			invalidConfiguredValue: trimmed
-		};
-	}
-
-	return {
-		markerImagesPath: normalizeMarkerImagesPath(trimmed),
-		invalidConfiguredValue: null
-	};
-}
-
-function escapeHtmlAttribute(value) {
-	return String(value || '')
-		.replace(/&/g, '&amp;')
-		.replace(/"/g, '&quot;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;');
 }
 
 function isServerStatefulModeEnabled() {
@@ -94,11 +42,6 @@ function getMongoFallbackMessage(reason) {
 	return usesServerMemory
 		? 'Mongo connection failed; using server in-memory fallback'
 		: 'Mongo connection failed; using client-local fallback';
-}
-
-function getFooterVersionStamp() {
-	const configuredTimestamp = String(process.env.APP_FOOTER_TIMESTAMP || '28/05/26 08:39').trim();
-	return configuredTimestamp ? `${APP_VERSION} ${configuredTimestamp}` : APP_VERSION;
 }
 
 function defaultGameState() {
@@ -681,12 +624,11 @@ function isValidStatePayload(payload) {
 	return true;
 }
 
-function getRuntimeMode({ mongoStore, markerImagesPathOverride } = {}) {
+function getRuntimeMode({ mongoStore } = {}) {
 	const mongoConfigured = Boolean(process.env.MONGODB_URI);
 	const statefulModeValue = String(process.env.STATEFUL_MODE || '').trim().toLowerCase();
 	const statefulRedisModeValue = String(process.env.STATEFUL_REDIS_MODE || '').trim().toLowerCase();
 	const markerImageToggleEnabled = isEnabledEnvToggle(process.env.USE_MARKER_IMAGES);
-	const markerImagesPath = normalizeMarkerImagesPath(markerImagesPathOverride ?? process.env.MARKER_IMAGES_PATH);
 	const mongoConnected = Boolean(mongoConfigured
 		&& mongoStore
 		&& typeof mongoStore.isMongoConnected === 'function'
@@ -709,7 +651,6 @@ function getRuntimeMode({ mongoStore, markerImagesPathOverride } = {}) {
 		mongoConnected,
 		statefulToggleEnabled,
 		markerImageToggleEnabled,
-		markerImagesPath,
 		clientLocalStateful,
 		isPersistent: mongoConnected || statefulToggleEnabled,
 		modeLabel
@@ -923,16 +864,6 @@ function createServer({ port = 3000, logger, metrics } = {}) {
 		appLogger[level](payload);
 	};
 
-	const markerImagesPathConfig = resolveMarkerImagesPathConfig(process.env.MARKER_IMAGES_PATH);
-	if (markerImagesPathConfig.invalidConfiguredValue) {
-		logEvent('warn', {
-			code: 'CFG_001',
-			message: 'Invalid MARKER_IMAGES_PATH; using /images fallback',
-			reason: 'invalid_marker_images_path',
-			configuredValue: markerImagesPathConfig.invalidConfiguredValue
-		});
-	}
-
 	const getMongoStateStore = () => {
 		const mongoUri = process.env.MONGODB_URI;
 		if (!mongoUri) {
@@ -1000,15 +931,12 @@ function createServer({ port = 3000, logger, metrics } = {}) {
 			res.setHeader('x-correlation-id', correlationId);
 
 			const sessionId = resolveSessionId(req, res);
-			const configuredMode = getRuntimeMode({ markerImagesPathOverride: markerImagesPathConfig.markerImagesPath });
+			const configuredMode = getRuntimeMode();
 			const mongoStore = configuredMode.mongoConfigured ? getMongoStateStore() : null;
 			if (mongoStore && typeof mongoStore.awaitReady === 'function') {
 				await mongoStore.awaitReady();
 			}
-			const mode = getRuntimeMode({
-				mongoStore,
-				markerImagesPathOverride: markerImagesPathConfig.markerImagesPath
-			});
+			const mode = getRuntimeMode({ mongoStore });
 			const useMongoStore = Boolean(mongoStore && mode.mongoConnected);
 			const scoreboardTitle = getScoreboardTitle(mode);
 
@@ -1096,7 +1024,6 @@ function createServer({ port = 3000, logger, metrics } = {}) {
 			};
 
 			if (req.url === '/' && req.method === 'GET') {
-				const footerVersionStamp = getFooterVersionStamp();
 				res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
 				res.end(`
 				<!doctype html>
@@ -1105,7 +1032,6 @@ function createServer({ port = 3000, logger, metrics } = {}) {
 						<meta charset="UTF-8" />
 						<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 						<meta name="use-marker-images" content="${mode.markerImageToggleEnabled ? 'true' : 'false'}" />
-						<meta name="marker-images-path" content="${escapeHtmlAttribute(mode.markerImagesPath)}" />
 						<title>Sparta App</title>
 						<link rel="stylesheet" href="/styles.css" />
 					</head>
@@ -1140,7 +1066,6 @@ function createServer({ port = 3000, logger, metrics } = {}) {
 						</div>
 						<p class="page-footer">Copyright © 2026 Sparta Global</p>
 						<p class="mode-pill">Mode: ${mode.modeLabel}</p>
-						<p class="version-stamp">${escapeHtmlAttribute(footerVersionStamp)}</p>
 						<script src="/app.js"></script>
 					</body>
 				</html>

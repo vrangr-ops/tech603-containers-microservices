@@ -1,28 +1,24 @@
-version: '3.8'
-
 services:
-  # 1. Your Node.js Microservice
+
   api:
-    image: vrangrops/sparta-test-app:latest # Replace with your actual image name
+    image: vrangrops/sparta-test-app:latest
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      # Your app can connect using this standard connection string format:
-      - MONGO_URI=mongodb://root:examplepassword@mongodb:27017/mydatabase?authSource=admin
+      - MONGODB_URI=mongodb://mongodb:27017/tictactoe
+      - STATEFUL_MODE=mongodb
+    # Seed FIRST, then launch the server
+    command: /bin/sh -c "node seeds/seed.js; node index.js"
     depends_on:
       - mongodb
 
-  # 2. The MongoDB Database
+  # The MongoDB Database
   mongodb:
-    image: mongo:6.0                           # Official MongoDB image
+    image: mongo:8.2.5
     ports:
       - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=root
-      - MONGO_INITDB_ROOT_PASSWORD=examplepassword
     volumes:
-      - mongo_data:/data/db                    # Persists your MongoDB data
+      - ttt-mongodb-data:/data/db
 
 volumes:
-  mongo_data:                                  # Named volume for data persistence
+  ttt-mongodb-data:

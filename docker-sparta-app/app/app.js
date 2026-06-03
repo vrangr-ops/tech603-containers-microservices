@@ -472,41 +472,13 @@ function cellLabel(value) {
 	return value === '' ? ' ' : value;
 }
 
-function normalizeMarkerImagesPath(value) {
-	const trimmed = String(value || '').trim();
-	if (!trimmed) {
-		return '/images';
-	}
-
-	if (trimmed.startsWith('/')) {
-		const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
-		return withoutTrailingSlash || '/images';
-	}
-
-	let parsedUrl;
-	try {
-		parsedUrl = new URL(trimmed);
-	} catch {
-		return '/images';
-	}
-
-	if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-		return '/images';
-	}
-
-	const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
-	return withoutTrailingSlash || '/images';
-}
-
-function getMarkerImageSource(value, markerImagesPath) {
-	const basePath = normalizeMarkerImagesPath(markerImagesPath);
-
+function getMarkerImageSource(value) {
 	if (value === 'X') {
-		return `${basePath}/x.png`;
+		return '/images/x.png';
 	}
 
 	if (value === 'O') {
-		return `${basePath}/o.png`;
+		return '/images/o.png';
 	}
 
 	return '';
@@ -540,13 +512,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 	const quitButton = document.getElementById('quit-btn');
 	const modeElement = document.querySelector('.mode-pill');
 	const markerImageToggleElement = document.querySelector('meta[name="use-marker-images"]');
-	const markerImagesPathElement = document.querySelector('meta[name="marker-images-path"]');
 	const useMarkerImages = Boolean(
 		markerImageToggleElement
 		&& String(markerImageToggleElement.getAttribute('content') || '').toLowerCase() === 'true'
-	);
-	const markerImagesPath = normalizeMarkerImagesPath(
-		markerImagesPathElement ? markerImagesPathElement.getAttribute('content') : '/images'
 	);
 	const isClientLocalMode = Boolean(modeElement && /Client-local stateful/i.test(modeElement.textContent || ''));
 	const store = isClientLocalMode ? createClientLocalStore() : createServerStore();
@@ -580,7 +548,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 			if (useMarkerImages && markerValue !== '') {
 				const markerImage = document.createElement('img');
 				markerImage.className = 'marker-image';
-				markerImage.src = getMarkerImageSource(markerValue, markerImagesPath);
+				markerImage.src = getMarkerImageSource(markerValue);
 				markerImage.alt = markerValue;
 				button.appendChild(markerImage);
 			} else {
