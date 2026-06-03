@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # 1. Your Node.js Microservice
+  api:
+    image: vrangrops/sparta-test-app:latest # Replace with your actual image name
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Your app can connect using this standard connection string format:
+      - MONGO_URI=mongodb://root:examplepassword@mongodb:27017/mydatabase?authSource=admin
+    depends_on:
+      - mongodb
+
+  # 2. The MongoDB Database
+  mongodb:
+    image: mongo:6.0                           # Official MongoDB image
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=examplepassword
+    volumes:
+      - mongo_data:/data/db                    # Persists your MongoDB data
+
+volumes:
+  mongo_data:                                  # Named volume for data persistence
